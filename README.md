@@ -9,10 +9,11 @@
 - Локальный MTProto-only прокси на `host:port` из настроек.
 - Разбор MTProto obfuscated handshake и определение `DC`/`media`.
 - Прямой `TCP` upstream до Telegram DC с корректным re-encrypt bridge.
-- Конфигурация в пользовательском каталоге:
+- Конфигурация хранится локально:
   - Linux: `~/.config/TgFyneProxy/config.json`
   - Windows: `%AppData%\\TgFyneProxy\\config.json`
-  - Android: каталог, который возвращает `os.UserConfigDir()`
+  - Android через `Fyne`: каталог, который возвращает `os.UserConfigDir()`
+  - Android-native app: private app storage в `filesDir/tg-fyne-proxy`
 
 ## Архитектура
 
@@ -82,6 +83,7 @@ make windows
 ```bash
 go install fyne.io/tools/cmd/fyne@latest
 make android-apk
+make android-aab
 ```
 
 Для packaging metadata добавлен [`FyneApp.toml`](/home/falearn/projects/tg-fyne-proxy/FyneApp.toml), а типовые команды лежат в [`Makefile`](/home/falearn/projects/tg-fyne-proxy/Makefile).
@@ -96,7 +98,7 @@ gomobile bind -target=android -javapkg com.falearn.tgfyneproxy.go \
   -o android-app/app/libs/tgfyneproxy-go.aar ./mobilebridge
 
 cd android-app
-gradle assembleDebug
+./gradlew assembleDebug
 ```
 
 То же самое через `Makefile`:
@@ -114,6 +116,7 @@ Android app включает:
 - `NotificationChannel` и action `Stop`
 - `WakeLock`
 - `BOOT_COMPLETED` и `MY_PACKAGE_REPLACED` receiver для `autostart`
+- runtime permission flow для `POST_NOTIFICATIONS`
 - native UI для редактирования конфига и управления прокси
 - import/export JSON конфига
 - QR для `tg://proxy` ссылки
@@ -134,8 +137,10 @@ Release signing:
 `Fyne` Android build по-прежнему не равен foreground-service варианту. Для надежной фоновой работы нужно собирать native Android app из [`android-app`](/home/falearn/projects/tg-fyne-proxy/android-app), а не только `fyne package -os android`.
 Детали лежат в [`android-foreground-service.md`](/home/falearn/projects/tg-fyne-proxy/docs/android-foreground-service.md).
 
-## Следующий этап
+## Что важно понимать по Android
 
-1. Добавить richer Android diagnostics: отдельно показать `WS blacklist/cooldown` и текущий upstream mode.
-2. Подтянуть export/import и QR в native Android UI.
-3. Добавить release signing flow и CI для `gomobile bind + gradle assembleRelease`.
+`Fyne`-сборка и native Android app используют один и тот же Go proxy core, но это два разных runtime path.
+
+- `fyne package -os android` удобно для быстрого mobile build существующего UI, но он не заменяет отдельный foreground service.
+- Каталог [`android-app`](/home/falearn/projects/tg-fyne-proxy/android-app) нужен для сценария, где важна более надежная фоновая работа, автозапуск после boot/update и постоянная notification.
+- Native Android path хранит конфиг в app-private storage через bridge, поэтому его storage semantics отличаются от desktop/`Fyne` path.
