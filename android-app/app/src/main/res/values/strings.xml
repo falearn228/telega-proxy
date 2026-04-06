@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TG Fyne Proxy</string>
+    <string name="app_subtitle">Android-native control plane for the Go MTProto proxy runtime.</string>
+    <string name="host">Host</string>
+    <string name="port">Port</string>
+    <string name="secret">Secret</string>
+    <string name="new_secret">New secret</string>
+    <string name="dc_map">DC map (one per line: dc:ip)</string>
+    <string name="buffer_kb">Buffer KB</string>
+    <string name="ws_pool_size">WS pool size</string>
+    <string name="connect_timeout_sec">Connect timeout, sec</string>
+    <string name="connect_via_ws">Connect via Telegram WebSocket</string>
+    <string name="verbose_logging">Verbose logging</string>
+    <string name="autostart">Autostart on boot</string>
+    <string name="save">Save</string>
+    <string name="start_proxy">Start</string>
+    <string name="stop_proxy">Stop</string>
+    <string name="import_config">Import</string>
+    <string name="export_config">Export</string>
+    <string name="show_qr">QR</string>
+    <string name="status">Status</string>
+    <string name="telegram_link">Telegram link</string>
+    <string name="copy_link">Copy link</string>
+    <string name="open_telegram">Open in Telegram</string>
+    <string name="export_qr_png">Export QR PNG</string>
+    <string name="share_link">Share link</string>
+    <string name="stats">Stats</string>
+    <string name="diagnostics">Diagnostics</string>
+    <string name="dc_diagnostics">Per-DC Diagnostics</string>
+    <string name="logs">Logs</string>
+    <string name="copied">Link copied</string>
+    <string name="saved">Configuration saved</string>
+    <string name="imported">Configuration imported</string>
+    <string name="exported">Configuration exported</string>
+    <string name="qr_exported">QR PNG exported</string>
+    <string name="share_chooser">Share proxy link</string>
+    <string name="share_qr_chooser">Share QR PNG</string>
+    <string name="no_link">Telegram link is empty</string>
+    <string name="status_running">Running</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="last_error">Last error: %1$s</string>
+    <string name="invalid_dc_map_line">Invalid DC map line: %1$s</string>
+    <string name="stats_template">total: %1$d\nactive: %2$d\nerrors: %3$d\nws: %4$d\ntcp: %5$d\nws errors: %6$d\nup: %7$d bytes\ndown: %8$d bytes</string>
+    <string name="diag_last_mode">last upstream: %1$s</string>
+    <string name="diag_ws_state">ws state:</string>
+    <string name="diag_ws_pool">ws pool:</string>
+    <string name="diag_dc_group">dc=%1$d media=%2$s</string>
+    <string name="diag_dc_state">  state=%1$s until=%2$s</string>
+    <string name="diag_dc_pool">  pool idle=%1$d refilling=%2$s</string>
+    <string name="diag_card_state">State: %1$s</string>
+    <string name="diag_card_until">Cooldown until: %1$s</string>
+    <string name="diag_card_pool">Pool: idle %1$d, refilling %2$s</string>
+    <string name="diag_none">none</string>
+    <string name="diag_ws_state_item">dc=%1$d media=%2$s state=%3$s until=%4$s</string>
+    <string name="diag_ws_pool_item">dc=%1$d media=%2$s idle=%3$d refilling=%4$s</string>
+    <string name="notification_channel_name">Proxy service</string>
+    <string name="notification_channel_description">Foreground notification for the Telegram MTProto proxy</string>
+    <string name="notification_running">Proxy running</string>
+    <string name="notification_stopped">Proxy stopped</string>
+    <string name="notification_error">Proxy start failed</string>
+    <string name="notification_idle">Waiting for traffic</string>
+    <string name="notification_stats">active %1$d, total %2$d</string>
+    <string name="qr_title">Telegram proxy QR</string>
+    <string name="qr_hint">Scan in Telegram or copy the link below.</string>
+    <string name="close">Close</string>
+</resources>

@@ -1,0 +1,31 @@
+.DS_Store
+Thumbs.db
+
+# Go
+bin/
+dist/
+coverage.out
+*.test
+
+# Fyne packaging
+*.apk
+*.aab
+*.ipa
+*.app
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Android / Gradle
+.gradle/
+local.properties
+android-app/.gradle/
+android-app/local.properties
+android-app/app/build/
+android-app/app/libs/*.aar
+android-app/keystore.properties
+
+# Editors
+.idea/
+.vscode/

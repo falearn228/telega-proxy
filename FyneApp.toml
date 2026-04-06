@@ -1,0 +1,8 @@
+[Details]
+  Name = "TG Fyne Proxy"
+  ID = "github.com.falearn.tgfyneproxy"
+  Version = "0.1.0"
+  Build = 1
+
+[Migrations]
+  fyneDo = true

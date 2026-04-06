@@ -1,0 +1,83 @@
+name: android-native
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GO_VERSION: "1.26.0"
+      GOMOBILE_JAVA_PKG: com.falearn.tgfyneproxy.go
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          gomobile init
+
+      - name: Build Go AAR
+        working-directory: .
+        run: |
+          mkdir -p android-app/app/libs
+          gomobile bind -target=android -javapkg "${GOMOBILE_JAVA_PKG}" \
+            -o android-app/app/libs/tgfyneproxy-go.aar ./mobilebridge
+
+      - name: Validate Go module
+        run: |
+          go fmt ./...
+          go build ./...
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android debug APK
+        working-directory: android-app
+        run: gradle assembleDebug
+
+      - name: Build Android release APK and AAB
+        if: ${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 != '' && secrets.ANDROID_SIGNING_STORE_PASSWORD != '' && secrets.ANDROID_SIGNING_KEY_ALIAS != '' && secrets.ANDROID_SIGNING_KEY_PASSWORD != '' }}
+        working-directory: android-app
+        env:
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 }}" | base64 -d > release.keystore
+          export ANDROID_SIGNING_STORE_FILE="${PWD}/release.keystore"
+          gradle assembleRelease
+          gradle bundleRelease
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-debug
+          path: |
+            android-app/app/build/outputs/apk/debug/*.apk
+            android-app/app/libs/tgfyneproxy-go.aar
+
+      - name: Upload Android release artifacts
+        if: ${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 != '' && secrets.ANDROID_SIGNING_STORE_PASSWORD != '' && secrets.ANDROID_SIGNING_KEY_ALIAS != '' && secrets.ANDROID_SIGNING_KEY_PASSWORD != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-release
+          path: |
+            android-app/app/build/outputs/apk/release/*.apk
+            android-app/app/build/outputs/bundle/release/*.aab
