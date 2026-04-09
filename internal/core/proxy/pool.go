@@ -96,9 +96,6 @@ func (p *wsPool) Warmup(key wsPoolKey, dial func() (*RawWebSocket, error)) {
 
 			ws, err := dial()
 			if err != nil {
-				if err != io.EOF {
-					return
-				}
 				return
 			}
 
