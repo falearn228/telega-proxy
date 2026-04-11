@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,7 +23,7 @@ func (s *Service) connectTelegramWS(dc int, isMedia bool, targetIP string) (*Raw
 	}
 	if s.wsPool != nil {
 		if ws := s.wsPool.Get(key); ws != nil {
-			s.logger("dc=%d media=%t ws pool hit", dc, isMedia)
+			s.logger("dc=%d media=%t ws pool hit via %s", dc, isMedia, targetIP)
 			s.wsPool.Warmup(key, func() (*RawWebSocket, error) {
 				return s.dialTelegramWS(dc, isMedia, targetIP)
 			})
@@ -86,7 +87,8 @@ func (s *Service) warmupWSPool() {
 	if s.wsPool == nil {
 		return
 	}
-	for dc, targetIP := range s.cfg.DCMap {
+	for dc := range s.cfg.DCMap {
+		targetIP := s.cfg.DCMap[dc]
 		for _, isMedia := range []bool{false, true} {
 			dcCopy := dc
 			targetIPCopy := targetIP
@@ -120,6 +122,21 @@ func (s *Service) bridgeWS(client io.ReadWriteCloser, ws *RawWebSocket, clientDe
 	defer cancel()
 
 	errCh := make(chan error, 2)
+	var upBytes atomic.Uint64
+	var downBytes atomic.Uint64
+	var upPackets atomic.Uint64
+	var downPackets atomic.Uint64
+	started := time.Now()
+	defer func() {
+		s.logger(
+			"ws session closed: up=%d bytes (%d pkts) down=%d bytes (%d pkts) in %.1fs",
+			upBytes.Load(),
+			upPackets.Load(),
+			downBytes.Load(),
+			downPackets.Load(),
+			time.Since(started).Seconds(),
+		)
+	}()
 
 	go func() {
 		buf := make([]byte, s.cfg.BufferKB*1024)
@@ -128,11 +145,16 @@ func (s *Service) bridgeWS(client io.ReadWriteCloser, ws *RawWebSocket, clientDe
 			if n > 0 {
 				plain := make([]byte, n)
 				clientDec.XORKeyStream(plain, buf[:n])
-				out := make([]byte, n)
-				tgEnc.XORKeyStream(out, plain)
-				parts := splitter.Split(out)
+				toTelegram := make([]byte, n)
+				tgEnc.XORKeyStream(toTelegram, plain)
+				var parts [][]byte
+				if splitter != nil {
+					parts = splitter.Split(toTelegram)
+				} else {
+					parts = [][]byte{toTelegram}
+				}
 				if len(parts) == 0 {
-					parts = [][]byte{out}
+					continue
 				}
 				if len(parts) > 1 {
 					if err := ws.SendBatch(parts); err != nil {
@@ -144,11 +166,16 @@ func (s *Service) bridgeWS(client io.ReadWriteCloser, ws *RawWebSocket, clientDe
 					return
 				}
 				s.stats.up.Add(uint64(n))
+				upBytes.Add(uint64(n))
+				upPackets.Add(uint64(len(parts)))
 			}
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					if tail := splitter.Flush(); len(tail) > 0 {
-						_ = ws.SendBatch(tail)
+					if splitter != nil {
+						if tail := splitter.Flush(); len(tail) > 0 {
+							_ = ws.SendBatch(tail)
+							upPackets.Add(uint64(len(tail)))
+						}
 					}
 					errCh <- nil
 					return
@@ -184,6 +211,8 @@ func (s *Service) bridgeWS(client io.ReadWriteCloser, ws *RawWebSocket, clientDe
 				return
 			}
 			s.stats.down.Add(uint64(len(payload)))
+			downBytes.Add(uint64(len(payload)))
+			downPackets.Add(1)
 			select {
 			case <-ctx.Done():
 				return

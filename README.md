@@ -62,6 +62,15 @@ go build ./cmd/tg-fyne-proxy
 GOOS=windows GOARCH=amd64 go build ./cmd/tg-fyne-proxy
 ```
 
+Windows GUI package через `Fyne` из Linux/WSL требует `fyne` CLI, `Icon.png` в `cmd/tg-fyne-proxy` и MinGW cross-compiler:
+
+```bash
+go install fyne.io/tools/cmd/fyne@latest
+sudo apt-get install -y gcc-mingw-w64-x86-64
+GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
+  fyne package -os windows --src ./cmd/tg-fyne-proxy --name tg-fyne-proxy
+```
+
 Или через packaging helper:
 
 ```bash

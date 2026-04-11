@@ -50,6 +50,7 @@ type Service struct {
 	mu       sync.RWMutex
 	listener net.Listener
 	cancel   context.CancelFunc
+	conns    map[net.Conn]struct{}
 	wg       sync.WaitGroup
 	running  atomic.Bool
 	stats    statsCounter
@@ -76,6 +77,7 @@ func NewService(cfg config.AppConfig, logger Logger) *Service {
 		logger:  logger,
 		wsPool:  newWSPool(cfg.PoolSize),
 		wsState: newWSTransportState(),
+		conns:   make(map[net.Conn]struct{}),
 	}
 }
 
@@ -117,6 +119,10 @@ func (s *Service) Stop() error {
 	s.mu.Lock()
 	ln := s.listener
 	cancel := s.cancel
+	conns := make([]net.Conn, 0, len(s.conns))
+	for conn := range s.conns {
+		conns = append(conns, conn)
+	}
 	s.listener = nil
 	s.cancel = nil
 	s.mu.Unlock()
@@ -126,6 +132,9 @@ func (s *Service) Stop() error {
 	}
 	if ln != nil {
 		_ = ln.Close()
+	}
+	for _, conn := range conns {
+		_ = conn.Close()
 	}
 	s.wg.Wait()
 	if s.wsPool != nil {
@@ -192,16 +201,30 @@ func (s *Service) acceptLoop(ctx context.Context, ln net.Listener) {
 
 		s.stats.total.Add(1)
 		s.stats.active.Add(1)
+		s.trackConn(conn)
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
 			defer s.stats.active.Add(^uint64(0))
+			defer s.untrackConn(conn)
 			if err := s.handleConn(ctx, conn); err != nil {
 				s.stats.errored.Add(1)
 				s.logger("connection error: %v", err)
 			}
 		}()
 	}
+}
+
+func (s *Service) trackConn(conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.conns[conn] = struct{}{}
+}
+
+func (s *Service) untrackConn(conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.conns, conn)
 }
 
 func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
@@ -218,39 +241,47 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 		return err
 	}
 
-	relayInit, err := GenerateRelayInit(hello.Protocol, hello.DC, hello.IsMedia)
-	if err != nil {
-		return fmt.Errorf("build relay init: %w", err)
-	}
-
 	clientDec, clientEnc, err := NewClientDecryptor(hello.ClientDecBytes, s.cfg.Secret)
 	if err != nil {
 		return err
 	}
-	tgEnc, tgDec, err := NewRelayCryptors(relayInit)
-	if err != nil {
-		return err
-	}
 
-	targetHost := s.resolveTarget(hello.DC)
-	if s.cfg.ConnectViaWS {
+	targetHost, configured := s.resolveTarget(hello.DC)
+	if s.cfg.ConnectViaWS && configured {
 		wsConn, err := s.connectTelegramWS(hello.DC, hello.IsMedia, targetHost)
 		if err == nil {
 			defer wsConn.Close()
-			if err := wsConn.Send(relayInit); err != nil {
-				s.stats.wsErr.Add(1)
-				s.logger("dc=%d media=%t ws relay init failed: %v", hello.DC, hello.IsMedia, err)
-			} else {
-				s.stats.ws.Add(1)
-				s.lastMode.Store("telegram-wss")
-				s.logger("dc=%d media=%t protocol=%s upstream=wss mode=telegram-wss", hello.DC, hello.IsMedia, hello.Protocol)
-				splitter := NewMessageSplitter(relayInit, hello.Protocol)
-				return s.bridgeWS(client, wsConn, clientDec, clientEnc, tgEnc, tgDec, splitter)
+			relayInit, err := GenerateRelayInit(hello.Protocol, hello.DC, hello.IsMedia)
+			if err != nil {
+				return fmt.Errorf("build ws relay init: %w", err)
 			}
+			tgEnc, tgDec, err := NewRelayCryptors(relayInit)
+			if err != nil {
+				return err
+			}
+			if err := wsConn.Send(relayInit); err != nil {
+				return fmt.Errorf("write ws relay init: %w", err)
+			}
+			s.stats.ws.Add(1)
+			s.lastMode.Store("telegram-wss")
+			s.logger("dc=%d media=%t protocol=%s upstream=wss mode=telegram-wss via %s", hello.DC, hello.IsMedia, hello.Protocol, targetHost)
+			splitter := NewMessageSplitter(relayInit, hello.Protocol)
+			return s.bridgeWS(client, wsConn, clientDec, clientEnc, tgEnc, tgDec, splitter)
 		} else {
 			s.stats.wsErr.Add(1)
 			s.logger("dc=%d media=%t ws connect failed, fallback to tcp: %v", hello.DC, hello.IsMedia, err)
 		}
+	} else if s.cfg.ConnectViaWS {
+		s.logger("dc=%d media=%t not in config -> fallback", hello.DC, hello.IsMedia)
+	}
+
+	relayInit, err := GenerateRelayInit(hello.Protocol, hello.DC, hello.IsMedia)
+	if err != nil {
+		return fmt.Errorf("build relay init: %w", err)
+	}
+	tgEnc, tgDec, err := NewRelayCryptors(relayInit)
+	if err != nil {
+		return err
 	}
 
 	targetAddr := net.JoinHostPort(targetHost, "443")
@@ -270,14 +301,14 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 	return s.bridge(client, server, clientDec, clientEnc, tgEnc, tgDec)
 }
 
-func (s *Service) resolveTarget(dc int) string {
+func (s *Service) resolveTarget(dc int) (string, bool) {
 	if target, ok := s.cfg.DCMap[dc]; ok && target != "" {
-		return target
+		return target, true
 	}
 	if target, ok := defaultDCIPs[dc]; ok {
-		return target
+		return target, false
 	}
-	return defaultDCIPs[2]
+	return defaultDCIPs[2], false
 }
 
 func (s *Service) bridge(client net.Conn, server net.Conn, clientDec, clientEnc, tgEnc, tgDec cipher.Stream) error {

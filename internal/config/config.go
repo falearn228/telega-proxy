@@ -36,6 +36,7 @@ type AppConfig struct {
 	ConnectViaWS  bool           `json:"connect_via_ws"`
 	PreferIPv6    bool           `json:"prefer_ipv6"`
 	ConnectTimout int            `json:"connect_timeout_sec"`
+	Autostart     bool           `json:"autostart,omitempty"`
 }
 
 func Default() AppConfig {
@@ -43,13 +44,20 @@ func Default() AppConfig {
 		Host:          "127.0.0.1",
 		Port:          1443,
 		Secret:        MustGenerateSecret(),
-		DCMap:         map[int]string{2: "149.154.167.220", 4: "149.154.167.220"},
+		DCMap:         DefaultDCMap(),
 		Verbose:       false,
 		BufferKB:      256,
 		PoolSize:      4,
-		ConnectViaWS:  false,
+		ConnectViaWS:  true,
 		PreferIPv6:    false,
 		ConnectTimout: 10,
+	}
+}
+
+func DefaultDCMap() map[int]string {
+	return map[int]string{
+		2: "149.154.167.220",
+		4: "149.154.167.220",
 	}
 }
 
@@ -106,10 +114,25 @@ func Load() (AppConfig, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return cfg, err
 	}
+	if isExpandedDefaultDCMap(cfg.DCMap) {
+		cfg.DCMap = DefaultDCMap()
+	}
 	if err := cfg.Validate(); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func isExpandedDefaultDCMap(dcMap map[int]string) bool {
+	if len(dcMap) != 6 {
+		return false
+	}
+	return dcMap[1] == "149.154.175.50" &&
+		dcMap[2] == "149.154.167.220" &&
+		dcMap[3] == "149.154.175.100" &&
+		(dcMap[4] == "149.154.167.91" || dcMap[4] == "149.154.167.220") &&
+		dcMap[5] == "149.154.171.5" &&
+		dcMap[203] == "91.105.192.100"
 }
 
 func Save(cfg AppConfig) error {

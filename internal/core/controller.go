@@ -8,6 +8,7 @@ import (
 
 	"github.com/falearn/tg-fyne-proxy/internal/config"
 	"github.com/falearn/tg-fyne-proxy/internal/core/proxy"
+	"github.com/falearn/tg-fyne-proxy/internal/platform"
 )
 
 type Snapshot struct {
@@ -33,6 +34,9 @@ func NewController() (*Controller, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
+	}
+	if platform.SupportsAutostart() {
+		cfg.Autostart = platform.IsAutostartEnabled()
 	}
 	c := &Controller{cfg: cfg}
 	c.service = proxy.NewService(cfg, c.appendLog)
@@ -60,6 +64,9 @@ func (c *Controller) Apply(cfg config.AppConfig, persist bool) error {
 		return err
 	}
 	if persist {
+		if err := platform.SetAutostart(cfg.Autostart); err != nil {
+			return err
+		}
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
@@ -110,6 +117,12 @@ func (c *Controller) Stop() error {
 	service := c.service
 	c.mu.RUnlock()
 	return service.Stop()
+}
+
+func (c *Controller) ClearLogs() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.logLines = nil
 }
 
 func (c *Controller) appendLog(format string, args ...any) {

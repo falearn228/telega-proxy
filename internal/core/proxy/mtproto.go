@@ -114,22 +114,14 @@ func GenerateRelayInit(protocol Protocol, dc int, isMedia bool) ([]byte, error) 
 	encKey := init[skipLen : skipLen+preKeyLen]
 	encIV := init[skipLen+preKeyLen : skipLen+preKeyLen+ivLen]
 
-	decInput := append([]byte(nil), init[skipLen:skipLen+preKeyLen+ivLen]...)
-	reverseBytes(decInput)
-	decKey := decInput[:preKeyLen]
-	decIV := decInput[preKeyLen:]
-
-	block, err := aes.NewCipher(decKey)
+	block, err := aes.NewCipher(encKey)
 	if err != nil {
 		return nil, err
 	}
-	stream := cipher.NewCTR(block, decIV)
+	stream := cipher.NewCTR(block, encIV)
 	encrypted := make([]byte, handshakeLen)
 	stream.XORKeyStream(encrypted, init)
 	copy(init[protoTagPos:], encrypted[protoTagPos:])
-
-	_ = encKey
-	_ = encIV
 	return init, nil
 }
 

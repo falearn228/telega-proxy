@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
@@ -20,6 +22,7 @@ import (
 
 	"github.com/falearn/tg-fyne-proxy/internal/config"
 	"github.com/falearn/tg-fyne-proxy/internal/core"
+	"github.com/falearn/tg-fyne-proxy/internal/platform"
 )
 
 const (
@@ -33,22 +36,29 @@ type App struct {
 	controller *core.Controller
 	mobileMode bool
 
-	hostEntry    *widget.Entry
-	portEntry    *widget.Entry
-	secretEntry  *widget.Entry
-	dcEntry      *widget.Entry
-	bufferEntry  *widget.Entry
-	poolEntry    *widget.Entry
-	timeoutEntry *widget.Entry
-	verboseCheck *widget.Check
-	wsCheck      *widget.Check
+	hostEntry      *widget.Entry
+	portEntry      *widget.Entry
+	secretEntry    *widget.Entry
+	dcEntry        *widget.Entry
+	bufferEntry    *widget.Entry
+	poolEntry      *widget.Entry
+	timeoutEntry   *widget.Entry
+	verboseCheck   *widget.Check
+	wsCheck        *widget.Check
+	autostartCheck *widget.Check
 
 	statusLabel *widget.Label
 	statsLabel  *widget.Label
 	linkEntry   *widget.Entry
 	logEntry    *widget.Entry
+	logScroll   *container.Scroll
 	infoText    *widget.RichText
 	tabs        *container.AppTabs
+
+	startButton *widget.Button
+	stopButton  *widget.Button
+	proxyBusy   bool
+	quitting    bool
 }
 
 func NewApp(controller *core.Controller) *App {
@@ -108,6 +118,10 @@ func (a *App) buildUI() {
 
 	a.wsCheck = widget.NewCheck("Connect via Telegram WebSocket", nil)
 	a.wsCheck.SetChecked(cfg.ConnectViaWS)
+	if platform.SupportsAutostart() {
+		a.autostartCheck = widget.NewCheck("Start with Windows", nil)
+		a.autostartCheck.SetChecked(cfg.Autostart)
+	}
 
 	a.statusLabel = widget.NewLabel("")
 	a.statsLabel = widget.NewLabel("")
@@ -124,7 +138,7 @@ func (a *App) buildUI() {
 	}
 	a.infoText = widget.NewRichTextFromMarkdown(infoMarkdown)
 
-	form := widget.NewForm(
+	formItems := []*widget.FormItem{
 		widget.NewFormItem("Host", a.hostEntry),
 		widget.NewFormItem("Port", a.portEntry),
 		widget.NewFormItem("Secret", a.secretEntry),
@@ -134,7 +148,11 @@ func (a *App) buildUI() {
 		widget.NewFormItem("Connect timeout, sec", a.timeoutEntry),
 		widget.NewFormItem("", a.verboseCheck),
 		widget.NewFormItem("", a.wsCheck),
-	)
+	}
+	if a.autostartCheck != nil {
+		formItems = append(formItems, widget.NewFormItem("", a.autostartCheck))
+	}
+	form := widget.NewForm(formItems...)
 
 	saveButton := widget.NewButton("Save", func() {
 		cfg, err := a.readForm()
@@ -149,43 +167,18 @@ func (a *App) buildUI() {
 		a.refresh()
 	})
 
-	regenerateButton := widget.NewButton("New secret", func() {
-		a.secretEntry.SetText(config.MustGenerateSecret())
+	a.startButton = widget.NewButton("Start proxy", func() {
+		a.startProxy()
 	})
 
-	startButton := widget.NewButton("Start proxy", func() {
-		cfg, err := a.readForm()
-		if err != nil {
-			a.showError(err)
-			return
-		}
-		if err := a.controller.Apply(cfg, true); err != nil {
-			a.showError(err)
-			return
-		}
-		if err := a.controller.Start(); err != nil {
-			a.showError(err)
-			return
-		}
+	a.stopButton = widget.NewButton("Stop proxy", func() {
+		a.stopProxy()
+	})
+
+	clearLogsButton := widget.NewButton("Clear logs", func() {
+		a.controller.ClearLogs()
 		a.refresh()
 	})
-
-	stopButton := widget.NewButton("Stop proxy", func() {
-		if err := a.controller.Stop(); err != nil {
-			a.showError(err)
-			return
-		}
-		a.refresh()
-	})
-
-	copyLinkButton := widget.NewButton("Copy tg:// link", func() {
-		snapshot := a.controller.Snapshot()
-		a.window.Clipboard().SetContent(snapshot.TGLink)
-	})
-
-	exportButton := widget.NewButton("Export config", a.exportConfig)
-	importButton := widget.NewButton("Import config", a.importConfig)
-	qrButton := widget.NewButton("Show QR", a.showQR)
 
 	openInTelegramButton := widget.NewButton("Open in Telegram", func() {
 		snapshot := a.controller.Snapshot()
@@ -199,18 +192,38 @@ func (a *App) buildUI() {
 		}
 	})
 
-	actionRow1 := container.NewGridWithColumns(2, saveButton, regenerateButton)
-	actionRow2 := container.NewGridWithColumns(2, startButton, stopButton)
-	actionRow3 := container.NewGridWithColumns(2, exportButton, importButton)
-	actionRow4 := container.NewGridWithColumns(3, copyLinkButton, qrButton, openInTelegramButton)
+	var moreButton *widget.Button
+	moreButton = widget.NewButton("More", func() {
+		menu := fyne.NewMenu("",
+			fyne.NewMenuItem("Import config", a.importConfig),
+			fyne.NewMenuItem("Export config", a.exportConfig),
+			fyne.NewMenuItem("New secret", func() {
+				a.secretEntry.SetText(config.MustGenerateSecret())
+			}),
+			fyne.NewMenuItem("Copy tg:// link", func() {
+				snapshot := a.controller.Snapshot()
+				a.window.Clipboard().SetContent(snapshot.TGLink)
+			}),
+			fyne.NewMenuItem("Show QR", a.showQR),
+		)
+		widget.ShowPopUpMenuAtRelativePosition(
+			menu,
+			a.window.Canvas(),
+			fyne.NewPos(0, moreButton.Size().Height),
+			moreButton,
+		)
+	})
+
+	actionRow1 := container.NewGridWithColumns(2, saveButton, a.startButton)
+	actionRow2 := container.NewGridWithColumns(2, a.stopButton, openInTelegramButton)
+	actionRow3 := container.NewGridWithColumns(1, moreButton)
 
 	var actionPanel fyne.CanvasObject
 	if a.mobileMode {
-		actionPanel = container.NewVBox(actionRow1, actionRow2, actionRow3, actionRow4)
+		actionPanel = container.NewVBox(actionRow1, actionRow2, actionRow3)
 	} else {
 		actionPanel = container.NewVBox(
-			container.NewHBox(saveButton, regenerateButton, layout.NewSpacer(), startButton, stopButton),
-			container.NewHBox(exportButton, importButton, copyLinkButton, qrButton, openInTelegramButton),
+			container.NewHBox(saveButton, a.startButton, a.stopButton, openInTelegramButton, layout.NewSpacer(), moreButton),
 		)
 	}
 
@@ -233,12 +246,13 @@ func (a *App) buildUI() {
 		a.statsLabel,
 	))
 
+	a.logScroll = container.NewVScroll(a.logEntry)
 	logPane := container.NewBorder(
-		widget.NewLabel("Log"),
+		container.NewHBox(widget.NewLabel("Log"), layout.NewSpacer(), clearLogsButton),
 		nil,
 		nil,
 		nil,
-		container.NewVScroll(a.logEntry),
+		a.logScroll,
 	)
 
 	if a.mobileMode {
@@ -274,7 +288,17 @@ func (a *App) buildUI() {
 }
 
 func (a *App) setupLifecycle() {
+	a.setupTray()
 	lifecycle := a.fyneApp.Lifecycle()
+
+	if !a.mobileMode && (runtime.GOOS == "windows" || runtime.GOOS == "linux") {
+		a.window.SetCloseIntercept(func() {
+			if a.quitting {
+				return
+			}
+			a.window.Hide()
+		})
+	}
 
 	lifecycle.SetOnStarted(func() {
 		fyne.Do(a.refresh)
@@ -307,6 +331,76 @@ func (a *App) setupLifecycle() {
 	})
 }
 
+func (a *App) setupTray() {
+	if a.mobileMode || (runtime.GOOS != "windows" && runtime.GOOS != "linux") {
+		return
+	}
+	desktopApp, ok := a.fyneApp.(desktop.App)
+	if !ok {
+		return
+	}
+
+	desktopApp.SetSystemTrayMenu(fyne.NewMenu("TG Fyne Proxy",
+		fyne.NewMenuItem("Show", func() {
+			a.window.Show()
+			a.window.RequestFocus()
+			a.refresh()
+		}),
+		fyne.NewMenuItem("Start proxy", a.startProxy),
+		fyne.NewMenuItem("Stop proxy", a.stopProxy),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Quit", a.quitApp),
+	))
+}
+
+func (a *App) startProxy() {
+	cfg, err := a.readForm()
+	if err != nil {
+		a.showError(err)
+		return
+	}
+	a.proxyBusy = true
+	a.refresh()
+	go func() {
+		err := a.controller.Apply(cfg, true)
+		if err == nil {
+			err = a.controller.Start()
+		}
+		fyne.Do(func() {
+			a.proxyBusy = false
+			if err != nil {
+				a.showError(err)
+			}
+			a.refresh()
+		})
+	}()
+}
+
+func (a *App) stopProxy() {
+	a.proxyBusy = true
+	a.refresh()
+	go func() {
+		err := a.controller.Stop()
+		fyne.Do(func() {
+			a.proxyBusy = false
+			if err != nil {
+				a.showError(err)
+			}
+			a.refresh()
+		})
+	}()
+}
+
+func (a *App) quitApp() {
+	a.quitting = true
+	go func() {
+		_ = a.controller.Stop()
+		fyne.Do(func() {
+			a.fyneApp.Quit()
+		})
+	}()
+}
+
 func (a *App) startRefreshLoop() {
 	go func() {
 		ticker := time.NewTicker(time.Second)
@@ -326,6 +420,16 @@ func (a *App) refresh() {
 	if snapshot.LastError != "" {
 		state += "\nlast error: " + snapshot.LastError
 	}
+	if a.proxyBusy {
+		a.startButton.Disable()
+		a.stopButton.Disable()
+	} else if snapshot.Running {
+		a.startButton.Disable()
+		a.stopButton.Enable()
+	} else {
+		a.startButton.Enable()
+		a.stopButton.Disable()
+	}
 	a.statusLabel.SetText(state)
 	a.linkEntry.SetText(snapshot.TGLink)
 	a.statsLabel.SetText(fmt.Sprintf(
@@ -339,7 +443,12 @@ func (a *App) refresh() {
 		snapshot.Stats.BytesUp,
 		snapshot.Stats.BytesDown,
 	))
-	a.logEntry.SetText(snapshot.Logs)
+	if a.logEntry.Text != snapshot.Logs {
+		a.logEntry.SetText(snapshot.Logs)
+		if a.logScroll != nil {
+			a.logScroll.ScrollToBottom()
+		}
+	}
 }
 
 func (a *App) readForm() (config.AppConfig, error) {
@@ -378,6 +487,9 @@ func (a *App) readForm() (config.AppConfig, error) {
 	cfg.ConnectTimout = timeoutSec
 	cfg.Verbose = a.verboseCheck.Checked
 	cfg.ConnectViaWS = a.wsCheck.Checked
+	if a.autostartCheck != nil {
+		cfg.Autostart = a.autostartCheck.Checked
+	}
 	cfg.PreferIPv6 = false
 	return cfg, cfg.Validate()
 }
@@ -392,6 +504,9 @@ func (a *App) populateForm(cfg config.AppConfig) {
 	a.timeoutEntry.SetText(strconv.Itoa(cfg.ConnectTimout))
 	a.verboseCheck.SetChecked(cfg.Verbose)
 	a.wsCheck.SetChecked(cfg.ConnectViaWS)
+	if a.autostartCheck != nil {
+		a.autostartCheck.SetChecked(cfg.Autostart)
+	}
 }
 
 func (a *App) exportConfig() {

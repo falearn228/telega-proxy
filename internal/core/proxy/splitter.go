@@ -25,6 +25,10 @@ func NewMessageSplitter(relayInit []byte, protocol Protocol) *MessageSplitter {
 	return &MessageSplitter{dec: dec, protocol: protocol}
 }
 
+func NewPlainMessageSplitter(protocol Protocol) *MessageSplitter {
+	return &MessageSplitter{protocol: protocol}
+}
+
 func (s *MessageSplitter) Split(chunk []byte) [][]byte {
 	if s == nil || len(chunk) == 0 {
 		return nil
@@ -35,7 +39,11 @@ func (s *MessageSplitter) Split(chunk []byte) [][]byte {
 
 	s.cipherBuf = append(s.cipherBuf, chunk...)
 	plainChunk := make([]byte, len(chunk))
-	s.dec.XORKeyStream(plainChunk, chunk)
+	if s.dec != nil {
+		s.dec.XORKeyStream(plainChunk, chunk)
+	} else {
+		copy(plainChunk, chunk)
+	}
 	s.plainBuf = append(s.plainBuf, plainChunk...)
 
 	var parts [][]byte
