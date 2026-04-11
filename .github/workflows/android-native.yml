@@ -1,5 +1,4 @@
 name: android-native
-
 on:
   push:
     branches: [ main ]
@@ -11,6 +10,12 @@ jobs:
     env:
       GO_VERSION: "1.26.0"
       GOMOBILE_JAVA_PKG: com.falearn.tgfyneproxy.go
+
+      ANDROID_SIGNING_STORE_FILE_BASE64: ${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 }}
+      ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+      ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+      ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -53,14 +58,10 @@ jobs:
         run: gradle assembleDebug
 
       - name: Build Android release APK and AAB
-        if: ${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 != '' && secrets.ANDROID_SIGNING_STORE_PASSWORD != '' && secrets.ANDROID_SIGNING_KEY_ALIAS != '' && secrets.ANDROID_SIGNING_KEY_PASSWORD != '' }}
+        if: ${{ env.ANDROID_SIGNING_STORE_FILE_BASE64 != '' && env.ANDROID_SIGNING_STORE_PASSWORD != '' && env.ANDROID_SIGNING_KEY_ALIAS != '' && env.ANDROID_SIGNING_KEY_PASSWORD != '' }}
         working-directory: android-app
-        env:
-          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
-          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
-          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 }}" | base64 -d > release.keystore
+          echo "$ANDROID_SIGNING_STORE_FILE_BASE64" | base64 -d > release.keystore
           export ANDROID_SIGNING_STORE_FILE="${PWD}/release.keystore"
           gradle assembleRelease
           gradle bundleRelease
@@ -74,7 +75,7 @@ jobs:
             android-app/app/libs/tgfyneproxy-go.aar
 
       - name: Upload Android release artifacts
-        if: ${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 != '' && secrets.ANDROID_SIGNING_STORE_PASSWORD != '' && secrets.ANDROID_SIGNING_KEY_ALIAS != '' && secrets.ANDROID_SIGNING_KEY_PASSWORD != '' }}
+        if: ${{ env.ANDROID_SIGNING_STORE_FILE_BASE64 != '' && env.ANDROID_SIGNING_STORE_PASSWORD != '' && env.ANDROID_SIGNING_KEY_ALIAS != '' && env.ANDROID_SIGNING_KEY_PASSWORD != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: android-native-release
