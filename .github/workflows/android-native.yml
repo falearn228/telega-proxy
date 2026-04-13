@@ -10,6 +10,7 @@ jobs:
     env:
       GO_VERSION: "1.26.0"
       GOMOBILE_JAVA_PKG: com.falearn.tgfyneproxy.go
+      GOMOBILE_ANDROID_API: "26"
 
       ANDROID_SIGNING_STORE_FILE_BASE64: ${{ secrets.ANDROID_SIGNING_STORE_FILE_BASE64 }}
       ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
@@ -42,7 +43,7 @@ jobs:
         working-directory: .
         run: |
           mkdir -p android-app/app/libs
-          gomobile bind -target=android -javapkg "${GOMOBILE_JAVA_PKG}" \
+          gomobile bind -target=android -androidapi="${GOMOBILE_ANDROID_API}" -javapkg "${GOMOBILE_JAVA_PKG}" \
             -o android-app/app/libs/tgfyneproxy-go.aar ./mobilebridge
 
       - name: Validate Go module
