@@ -53,7 +53,7 @@ func (s *Service) dialTelegramWS(dc int, isMedia bool, targetIP string) (*RawWeb
 	var lastErr error = io.EOF
 
 	for _, domain := range wsDomains(dc, isMedia) {
-		ws, err := ConnectRawWebSocket(targetIP, domain, time.Duration(s.cfg.ConnectTimout)*time.Second)
+		ws, err := ConnectRawWebSocketWithDial(targetIP, domain, time.Duration(s.cfg.ConnectTimout)*time.Second, s.dialUpstream)
 		if err == nil {
 			if s.wsState != nil {
 				s.wsState.Clear(key)

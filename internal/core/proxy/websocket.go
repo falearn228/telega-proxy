@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
@@ -41,13 +42,31 @@ type RawWebSocket struct {
 }
 
 func ConnectRawWebSocket(ip, domain string, timeout time.Duration) (*RawWebSocket, error) {
+	return ConnectRawWebSocketWithDial(ip, domain, timeout, func(ctx context.Context, network, addr string) (net.Conn, error) {
+		dialer := &net.Dialer{Timeout: timeout}
+		return dialer.DialContext(ctx, network, addr)
+	})
+}
+
+func ConnectRawWebSocketWithDial(ip, domain string, timeout time.Duration, dial func(context.Context, string, string) (net.Conn, error)) (*RawWebSocket, error) {
 	addr := net.JoinHostPort(ip, "443")
-	dialer := &net.Dialer{Timeout: timeout}
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	rawConn, err := dial(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	conn := tls.Client(rawConn, &tls.Config{
 		ServerName:         domain,
 		InsecureSkipVerify: true,
 	})
-	if err != nil {
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	if err := conn.HandshakeContext(ctx); err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 

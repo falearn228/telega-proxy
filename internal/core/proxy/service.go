@@ -281,8 +281,7 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 	}
 
 	targetAddr := net.JoinHostPort(targetHost, "443")
-	dialer := &net.Dialer{Timeout: time.Duration(s.cfg.ConnectTimout) * time.Second}
-	server, err := dialer.DialContext(ctx, "tcp", targetAddr)
+	server, err := s.dialUpstream(ctx, "tcp", targetAddr)
 	if err != nil {
 		return fmt.Errorf("dial target %s: %w", targetAddr, err)
 	}
@@ -292,8 +291,12 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 	}
 
 	s.stats.tcp.Add(1)
-	s.lastMode.Store("tcp-direct")
-	s.logger("dc=%d media=%t protocol=%s upstream=%s mode=tcp-direct", hello.DC, hello.IsMedia, hello.Protocol, targetAddr)
+	mode := "tcp-direct"
+	if s.cfg.UseRelay {
+		mode = "tcp-relay"
+	}
+	s.lastMode.Store(mode)
+	s.logger("dc=%d media=%t protocol=%s upstream=%s mode=%s", hello.DC, hello.IsMedia, hello.Protocol, targetAddr, mode)
 	return s.bridge(client, server, clientDec, clientEnc, tgEnc, tgDec)
 }
 
