@@ -103,7 +103,7 @@ make android-aab
 Этот путь использует `gomobile bind` и каталог [`android-app`](/home/falearn/projects/tg-fyne-proxy/android-app).
 
 ```bash
-gomobile bind -target=android -javapkg com.falearn.tgfyneproxy.go \
+gomobile bind -target=android -androidapi=26 -javapkg com.falearn.tgfyneproxy.go \
   -o android-app/app/libs/tgfyneproxy-go.aar ./mobilebridge
 
 cd android-app
