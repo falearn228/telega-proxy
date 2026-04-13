@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -36,6 +37,8 @@ type AppConfig struct {
 	ConnectViaWS  bool           `json:"connect_via_ws"`
 	PreferIPv6    bool           `json:"prefer_ipv6"`
 	ConnectTimout int            `json:"connect_timeout_sec"`
+	UseRelay      bool           `json:"use_relay,omitempty"`
+	RelayAddr     string         `json:"relay_addr,omitempty"`
 	Autostart     bool           `json:"autostart,omitempty"`
 }
 
@@ -193,6 +196,19 @@ func (c AppConfig) Validate() error {
 	}
 	if c.ConnectTimout <= 0 {
 		return errors.New("connect_timeout_sec must be positive")
+	}
+	if c.UseRelay {
+		host, port, err := net.SplitHostPort(strings.TrimSpace(c.RelayAddr))
+		if err != nil {
+			return fmt.Errorf("relay proxy must be ip:port: %w", err)
+		}
+		if net.ParseIP(host) == nil {
+			return fmt.Errorf("relay proxy host must be an IP address: %q", host)
+		}
+		portNum, err := strconv.Atoi(port)
+		if err != nil || portNum <= 0 || portNum > 65535 {
+			return fmt.Errorf("invalid relay proxy port: %q", port)
+		}
 	}
 	for dc, ip := range c.DCMap {
 		if dc == 0 {

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -45,6 +46,8 @@ type App struct {
 	timeoutEntry   *widget.Entry
 	verboseCheck   *widget.Check
 	wsCheck        *widget.Check
+	relayCheck     *widget.Check
+	relayEntry     *widget.Entry
 	autostartCheck *widget.Check
 
 	statusLabel *widget.Label
@@ -118,6 +121,17 @@ func (a *App) buildUI() {
 
 	a.wsCheck = widget.NewCheck("Connect via Telegram WebSocket", nil)
 	a.wsCheck.SetChecked(cfg.ConnectViaWS)
+
+	if a.supportsRelayUI() {
+		a.relayEntry = widget.NewEntry()
+		a.relayEntry.SetPlaceHolder("127.0.0.1:228")
+		a.relayEntry.SetText(cfg.RelayAddr)
+		a.relayCheck = widget.NewCheck("Relay traffic through HTTP proxy", func(enabled bool) {
+			a.setRelayInputVisible(enabled)
+		})
+		a.relayCheck.SetChecked(cfg.UseRelay)
+		a.setRelayInputVisible(cfg.UseRelay)
+	}
 	if platform.SupportsAutostart() {
 		a.autostartCheck = widget.NewCheck("Start with Windows", nil)
 		a.autostartCheck.SetChecked(cfg.Autostart)
@@ -148,6 +162,9 @@ func (a *App) buildUI() {
 		widget.NewFormItem("Connect timeout, sec", a.timeoutEntry),
 		widget.NewFormItem("", a.verboseCheck),
 		widget.NewFormItem("", a.wsCheck),
+	}
+	if a.relayCheck != nil && a.relayEntry != nil {
+		formItems = append(formItems, widget.NewFormItem("", container.NewVBox(a.relayCheck, a.relayEntry)))
 	}
 	if a.autostartCheck != nil {
 		formItems = append(formItems, widget.NewFormItem("", a.autostartCheck))
@@ -487,6 +504,10 @@ func (a *App) readForm() (config.AppConfig, error) {
 	cfg.ConnectTimout = timeoutSec
 	cfg.Verbose = a.verboseCheck.Checked
 	cfg.ConnectViaWS = a.wsCheck.Checked
+	if a.relayCheck != nil && a.relayEntry != nil {
+		cfg.UseRelay = a.relayCheck.Checked
+		cfg.RelayAddr = strings.TrimSpace(a.relayEntry.Text)
+	}
 	if a.autostartCheck != nil {
 		cfg.Autostart = a.autostartCheck.Checked
 	}
@@ -504,9 +525,30 @@ func (a *App) populateForm(cfg config.AppConfig) {
 	a.timeoutEntry.SetText(strconv.Itoa(cfg.ConnectTimout))
 	a.verboseCheck.SetChecked(cfg.Verbose)
 	a.wsCheck.SetChecked(cfg.ConnectViaWS)
+	if a.relayCheck != nil && a.relayEntry != nil {
+		a.relayCheck.SetChecked(cfg.UseRelay)
+		a.relayEntry.SetText(cfg.RelayAddr)
+		a.setRelayInputVisible(cfg.UseRelay)
+	}
 	if a.autostartCheck != nil {
 		a.autostartCheck.SetChecked(cfg.Autostart)
 	}
+}
+
+func (a *App) setRelayInputVisible(visible bool) {
+	if a.relayEntry == nil {
+		return
+	}
+	if visible {
+		a.relayEntry.Show()
+	} else {
+		a.relayEntry.Hide()
+	}
+	a.relayEntry.Refresh()
+}
+
+func (a *App) supportsRelayUI() bool {
+	return !a.mobileMode && (runtime.GOOS == "windows" || runtime.GOOS == "linux")
 }
 
 func (a *App) exportConfig() {
