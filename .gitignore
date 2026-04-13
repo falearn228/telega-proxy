@@ -24,7 +24,9 @@ android-app/.gradle/
 android-app/local.properties
 android-app/app/build/
 android-app/app/libs/*.aar
+android-app/app/libs/*-sources.jar
 android-app/keystore.properties
+android-app/release.keystore
 
 # Editors
 .idea/
