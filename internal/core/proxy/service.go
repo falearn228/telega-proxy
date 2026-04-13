@@ -103,11 +103,9 @@ func (s *Service) Start() error {
 		s.warmupWSPool()
 	}
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		s.acceptLoop(ctx, ln)
-	}()
+	})
 	return nil
 }
 
@@ -202,16 +200,14 @@ func (s *Service) acceptLoop(ctx context.Context, ln net.Listener) {
 		s.stats.total.Add(1)
 		s.stats.active.Add(1)
 		s.trackConn(conn)
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
+		s.wg.Go(func() {
 			defer s.stats.active.Add(^uint64(0))
 			defer s.untrackConn(conn)
 			if err := s.handleConn(ctx, conn); err != nil {
 				s.stats.errored.Add(1)
 				s.logger("connection error: %v", err)
 			}
-		}()
+		})
 	}
 }
 
