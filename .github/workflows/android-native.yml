@@ -48,8 +48,13 @@ jobs:
 
       - name: Validate Go module
         run: |
-          go fmt ./...
-          go build ./...
+          files="$(git ls-files '*.go')"
+          unformatted="$(gofmt -l ${files})"
+          if [ -n "${unformatted}" ]; then
+            echo "${unformatted}"
+            exit 1
+          fi
+          go test ./internal/config ./internal/core ./internal/core/proxy ./internal/platform ./mobilebridge
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
