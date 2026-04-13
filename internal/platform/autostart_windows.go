@@ -3,7 +3,6 @@
 package platform
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -34,7 +33,7 @@ func IsAutostartEnabled() bool {
 	if err != nil {
 		return strings.TrimSpace(value) != ""
 	}
-	return value == quoteArg(exe)
+	return value == autostartCommand(exe) || value == legacyAutostartCommand(exe)
 }
 
 func SetAutostart(enabled bool) error {
@@ -55,9 +54,5 @@ func SetAutostart(enabled bool) error {
 	if err != nil {
 		return err
 	}
-	return k.SetStringValue(autostartName, quoteArg(exe))
-}
-
-func quoteArg(path string) string {
-	return fmt.Sprintf("%q", path)
+	return k.SetStringValue(autostartName, autostartCommand(exe))
 }

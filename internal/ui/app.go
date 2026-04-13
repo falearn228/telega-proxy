@@ -62,9 +62,10 @@ type App struct {
 	stopButton  *widget.Button
 	proxyBusy   bool
 	quitting    bool
+	autostart   bool
 }
 
-func NewApp(controller *core.Controller) *App {
+func NewApp(controller *core.Controller, autostart bool) *App {
 	fyneApp := app.NewWithID("github.com/falearn/tg-fyne-proxy")
 	window := fyneApp.NewWindow("TG Fyne Proxy")
 
@@ -80,6 +81,7 @@ func NewApp(controller *core.Controller) *App {
 		window:     window,
 		controller: controller,
 		mobileMode: mobileMode,
+		autostart:  autostart,
 	}
 	a.buildUI()
 	a.setupLifecycle()
@@ -318,6 +320,10 @@ func (a *App) setupLifecycle() {
 	}
 
 	lifecycle.SetOnStarted(func() {
+		if a.autostart {
+			a.autostart = false
+			a.startProxyFromConfig()
+		}
 		fyne.Do(a.refresh)
 	})
 
@@ -383,6 +389,24 @@ func (a *App) startProxy() {
 		if err == nil {
 			err = a.controller.Start()
 		}
+		fyne.Do(func() {
+			a.proxyBusy = false
+			if err != nil {
+				a.showError(err)
+			}
+			a.refresh()
+		})
+	}()
+}
+
+func (a *App) startProxyFromConfig() {
+	if a.controller.Snapshot().Running {
+		return
+	}
+	a.proxyBusy = true
+	a.refresh()
+	go func() {
+		err := a.controller.Start()
 		fyne.Do(func() {
 			a.proxyBusy = false
 			if err != nil {

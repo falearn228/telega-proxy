@@ -37,6 +37,9 @@ func NewController() (*Controller, error) {
 	}
 	if platform.SupportsAutostart() {
 		cfg.Autostart = platform.IsAutostartEnabled()
+		if cfg.Autostart {
+			_ = platform.SetAutostart(true)
+		}
 	}
 	c := &Controller{cfg: cfg}
 	c.service = proxy.NewService(cfg, c.appendLog)
