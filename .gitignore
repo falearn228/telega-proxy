@@ -31,3 +31,4 @@ android-app/release.keystore
 # Editors
 .idea/
 .vscode/
+.omx/

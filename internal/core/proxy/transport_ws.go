@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -107,13 +108,13 @@ func wsDomains(dc int, isMedia bool) []string {
 	}
 	if isMedia {
 		return []string{
-			"kws" + itoa(dc) + "-1.web.telegram.org",
-			"kws" + itoa(dc) + ".web.telegram.org",
+			"kws" + strconv.Itoa(dc) + "-1.web.telegram.org",
+			"kws" + strconv.Itoa(dc) + ".web.telegram.org",
 		}
 	}
 	return []string{
-		"kws" + itoa(dc) + ".web.telegram.org",
-		"kws" + itoa(dc) + "-1.web.telegram.org",
+		"kws" + strconv.Itoa(dc) + ".web.telegram.org",
+		"kws" + strconv.Itoa(dc) + "-1.web.telegram.org",
 	}
 }
 
@@ -224,19 +225,4 @@ func (s *Service) bridgeWS(client io.ReadWriteCloser, ws *RawWebSocket, clientDe
 	err := <-errCh
 	cancel()
 	return err
-}
-
-func itoa(v int) string {
-	if v == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	n := v
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }
