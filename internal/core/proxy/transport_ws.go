@@ -118,11 +118,17 @@ func wsDomains(dc int, isMedia bool) []string {
 	}
 }
 
-func (s *Service) bridgeWS(client io.ReadWriteCloser, ws *RawWebSocket, clientDec, clientEnc, tgEnc, tgDec cipher.Stream, splitter *MessageSplitter) error {
-	ctx, cancel := context.WithCancel(context.Background())
+func (s *Service) bridgeWS(ctx context.Context, client io.ReadWriteCloser, ws *RawWebSocket, clientDec, clientEnc, tgEnc, tgDec cipher.Stream, splitter *MessageSplitter) error {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	errCh := make(chan error, 2)
+	go func() {
+		<-ctx.Done()
+		_ = client.Close()
+		_ = ws.Close()
+	}()
+
 	var upBytes atomic.Uint64
 	var downBytes atomic.Uint64
 	var upPackets atomic.Uint64

@@ -262,7 +262,7 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 			s.lastMode.Store("telegram-wss")
 			s.logger("dc=%d media=%t protocol=%s upstream=wss mode=telegram-wss via %s", hello.DC, hello.IsMedia, hello.Protocol, targetHost)
 			splitter := NewMessageSplitter(relayInit, hello.Protocol)
-			return s.bridgeWS(client, wsConn, clientDec, clientEnc, tgEnc, tgDec, splitter)
+			return s.bridgeWS(ctx, client, wsConn, clientDec, clientEnc, tgEnc, tgDec, splitter)
 		} else {
 			s.stats.wsErr.Add(1)
 			s.logger("dc=%d media=%t ws connect failed, fallback to tcp: %v", hello.DC, hello.IsMedia, err)
@@ -297,7 +297,7 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 	}
 	s.lastMode.Store(mode)
 	s.logger("dc=%d media=%t protocol=%s upstream=%s mode=%s", hello.DC, hello.IsMedia, hello.Protocol, targetAddr, mode)
-	return s.bridge(client, server, clientDec, clientEnc, tgEnc, tgDec)
+	return s.bridge(ctx, client, server, clientDec, clientEnc, tgEnc, tgDec)
 }
 
 func (s *Service) resolveTarget(dc int) (string, bool) {
@@ -310,11 +310,17 @@ func (s *Service) resolveTarget(dc int) (string, bool) {
 	return defaultDCIPs[2], false
 }
 
-func (s *Service) bridge(client net.Conn, server net.Conn, clientDec, clientEnc, tgEnc, tgDec cipher.Stream) error {
-	ctx, cancel := context.WithCancel(context.Background())
+func (s *Service) bridge(ctx context.Context, client net.Conn, server net.Conn, clientDec, clientEnc, tgEnc, tgDec cipher.Stream) error {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	errCh := make(chan error, 2)
+	go func() {
+		<-ctx.Done()
+		_ = client.Close()
+		_ = server.Close()
+	}()
+
 	copyStream := func(dst net.Conn, src net.Conn, dec cipher.Stream, enc cipher.Stream, counter *atomic.Uint64) {
 		buf := make([]byte, s.cfg.BufferKB*1024)
 		for {
