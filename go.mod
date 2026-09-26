@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	fyne.io/fyne/v2 v2.6.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+	golang.org/x/sys v0.43.0
 )
 
 require (
@@ -36,9 +37,7 @@ require (
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
 	golang.org/x/image v0.39.0 // indirect
-	golang.org/x/mobile v0.0.0-20260410095206-2cfb76559b7b // indirect
 	golang.org/x/net v0.35.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
