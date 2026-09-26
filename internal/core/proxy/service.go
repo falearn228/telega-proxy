@@ -242,8 +242,8 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 		return err
 	}
 
-	targetHost, configured := s.resolveTarget(hello.DC)
-	if s.cfg.ConnectViaWS && configured {
+	targetHost := s.resolveTarget(hello.DC)
+	if s.cfg.ConnectViaWS {
 		wsConn, err := s.connectTelegramWS(hello.DC, hello.IsMedia, targetHost)
 		if err == nil {
 			defer wsConn.Close()
@@ -267,8 +267,6 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 			s.stats.wsErr.Add(1)
 			s.logger("dc=%d media=%t ws connect failed, fallback to tcp: %v", hello.DC, hello.IsMedia, err)
 		}
-	} else if s.cfg.ConnectViaWS {
-		s.logger("dc=%d media=%t not in config -> fallback", hello.DC, hello.IsMedia)
 	}
 
 	relayInit, err := GenerateRelayInit(hello.Protocol, hello.DC, hello.IsMedia)
@@ -292,7 +290,7 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 
 	s.stats.tcp.Add(1)
 	mode := "tcp-direct"
-	if s.cfg.UseRelay {
+	if upstreamProxy, _ := s.proxyForTarget(targetAddr); upstreamProxy != nil {
 		mode = "tcp-relay"
 	}
 	s.lastMode.Store(mode)
@@ -300,14 +298,14 @@ func (s *Service) handleConn(ctx context.Context, client net.Conn) error {
 	return s.bridge(ctx, client, server, clientDec, clientEnc, tgEnc, tgDec)
 }
 
-func (s *Service) resolveTarget(dc int) (string, bool) {
+func (s *Service) resolveTarget(dc int) string {
 	if target, ok := s.cfg.DCMap[dc]; ok && target != "" {
-		return target, true
+		return target
 	}
 	if target, ok := defaultDCIPs[dc]; ok {
-		return target, false
+		return target
 	}
-	return defaultDCIPs[2], false
+	return defaultDCIPs[2]
 }
 
 func (s *Service) bridge(ctx context.Context, client net.Conn, server net.Conn, clientDec, clientEnc, tgEnc, tgDec cipher.Stream) error {

@@ -3,9 +3,11 @@ package proxy
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -60,6 +62,56 @@ func TestDialUpstreamUsesHTTPConnectRelay(t *testing.T) {
 		}
 	case err := <-errCh:
 		t.Fatalf("relay server error = %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for CONNECT request")
+	}
+}
+
+func TestDialUpstreamUsesAuthenticatedHTTPSProxyFromEnvironment(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	proxyURL := &url.URL{Scheme: "http", Host: ln.Addr().String(), User: url.UserPassword("user", "p@ss")}
+	t.Setenv("HTTPS_PROXY", proxyURL.String())
+	t.Setenv("https_proxy", proxyURL.String())
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
+
+	reqCh := make(chan *http.Request, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		req, err := http.ReadRequest(bufio.NewReader(conn))
+		if err != nil {
+			return
+		}
+		reqCh <- req
+		_, _ = fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+	}()
+
+	cfg := config.Default()
+	service := NewService(cfg, nil)
+	conn, err := service.dialUpstream(t.Context(), "tcp", "149.154.167.220:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	select {
+	case req := <-reqCh:
+		if req.Method != "CONNECT" || req.Host != "149.154.167.220:443" {
+			t.Fatalf("CONNECT request = %s %s", req.Method, req.Host)
+		}
+		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:p@ss"))
+		if got := req.Header.Get("Proxy-Authorization"); got != wantAuth {
+			t.Fatal("missing or invalid proxy authentication")
+		}
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for CONNECT request")
 	}

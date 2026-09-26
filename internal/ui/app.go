@@ -116,7 +116,7 @@ func (a *App) buildUI() {
 	a.poolEntry.SetText(strconv.Itoa(cfg.PoolSize))
 
 	a.timeoutEntry = widget.NewEntry()
-	a.timeoutEntry.SetText(strconv.Itoa(cfg.ConnectTimout))
+	a.timeoutEntry.SetText(strconv.Itoa(cfg.ConnectTimeout))
 
 	a.verboseCheck = widget.NewCheck("Verbose logging", nil)
 	a.verboseCheck.SetChecked(cfg.Verbose)
@@ -525,7 +525,7 @@ func (a *App) readForm() (config.AppConfig, error) {
 	if err != nil {
 		return cfg, fmt.Errorf("invalid timeout: %w", err)
 	}
-	cfg.ConnectTimout = timeoutSec
+	cfg.ConnectTimeout = timeoutSec
 	cfg.Verbose = a.verboseCheck.Checked
 	cfg.ConnectViaWS = a.wsCheck.Checked
 	if a.relayCheck != nil && a.relayEntry != nil {
@@ -546,7 +546,7 @@ func (a *App) populateForm(cfg config.AppConfig) {
 	a.dcEntry.SetText(config.FormatDCMap(cfg.DCMap))
 	a.bufferEntry.SetText(strconv.Itoa(cfg.BufferKB))
 	a.poolEntry.SetText(strconv.Itoa(cfg.PoolSize))
-	a.timeoutEntry.SetText(strconv.Itoa(cfg.ConnectTimout))
+	a.timeoutEntry.SetText(strconv.Itoa(cfg.ConnectTimeout))
 	a.verboseCheck.SetChecked(cfg.Verbose)
 	a.wsCheck.SetChecked(cfg.ConnectViaWS)
 	if a.relayCheck != nil && a.relayEntry != nil {

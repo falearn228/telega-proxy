@@ -1,0 +1,12 @@
+[Unit]
+Description=Local Telegram MTProto proxy
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/tg-proxy-service/proxy.env
+ExecStart=%h/.local/bin/tg-proxy-service
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

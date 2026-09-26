@@ -27,33 +27,33 @@ var (
 )
 
 type AppConfig struct {
-	Host          string         `json:"host"`
-	Port          int            `json:"port"`
-	Secret        string         `json:"secret"`
-	DCMap         map[int]string `json:"dc_map"`
-	Verbose       bool           `json:"verbose"`
-	BufferKB      int            `json:"buf_kb"`
-	PoolSize      int            `json:"pool_size"`
-	ConnectViaWS  bool           `json:"connect_via_ws"`
-	PreferIPv6    bool           `json:"prefer_ipv6"`
-	ConnectTimout int            `json:"connect_timeout_sec"`
-	UseRelay      bool           `json:"use_relay,omitempty"`
-	RelayAddr     string         `json:"relay_addr,omitempty"`
-	Autostart     bool           `json:"autostart,omitempty"`
+	Host           string         `json:"host"`
+	Port           int            `json:"port"`
+	Secret         string         `json:"secret"`
+	DCMap          map[int]string `json:"dc_map"`
+	Verbose        bool           `json:"verbose"`
+	BufferKB       int            `json:"buf_kb"`
+	PoolSize       int            `json:"pool_size"`
+	ConnectViaWS   bool           `json:"connect_via_ws"`
+	PreferIPv6     bool           `json:"prefer_ipv6"`
+	ConnectTimeout int            `json:"connect_timeout_sec"`
+	UseRelay       bool           `json:"use_relay,omitempty"`
+	RelayAddr      string         `json:"relay_addr,omitempty"`
+	Autostart      bool           `json:"autostart,omitempty"`
 }
 
 func Default() AppConfig {
 	return AppConfig{
-		Host:          "127.0.0.1",
-		Port:          1443,
-		Secret:        MustGenerateSecret(),
-		DCMap:         DefaultDCMap(),
-		Verbose:       false,
-		BufferKB:      256,
-		PoolSize:      4,
-		ConnectViaWS:  true,
-		PreferIPv6:    false,
-		ConnectTimout: 10,
+		Host:           "127.0.0.1",
+		Port:           1443,
+		Secret:         MustGenerateSecret(),
+		DCMap:          DefaultDCMap(),
+		Verbose:        false,
+		BufferKB:       256,
+		PoolSize:       4,
+		ConnectViaWS:   true,
+		PreferIPv6:     false,
+		ConnectTimeout: 10,
 	}
 }
 
@@ -194,7 +194,7 @@ func (c AppConfig) Validate() error {
 	if c.PoolSize <= 0 {
 		return errors.New("pool_size must be positive")
 	}
-	if c.ConnectTimout <= 0 {
+	if c.ConnectTimeout <= 0 {
 		return errors.New("connect_timeout_sec must be positive")
 	}
 	if c.UseRelay {

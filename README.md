@@ -19,6 +19,7 @@
 
 ```text
 cmd/tg-fyne-proxy        -> точка входа GUI
+cmd/tg-proxy-service     -> консольная точка входа без CGO
 internal/ui              -> окно, форма настроек, status/log panels
 internal/core            -> controller и orchestration
 internal/core/proxy      -> MTProto parsing, crypto, local proxy service
@@ -52,6 +53,37 @@ docs/android-foreground-service.md    -> Android-native foreground-service notes
 ```bash
 go run ./cmd/tg-fyne-proxy
 ```
+
+### Консольный сервис без CGO
+
+```bash
+make run-service
+# или собрать отдельный бинарник:
+make build-service
+./bin/tg-proxy-service
+```
+
+Сервис использует `~/.config/TgFyneProxy/config.json`, общий с desktop GUI. При первом запуске создаёт конфиг со случайным секретом и правами `0600`; параметры и секрет можно взять из этого файла. Слушает `host:port` из конфига (по умолчанию `127.0.0.1:1443`) и останавливается по `Ctrl+C` или `SIGTERM`. Для запуска не нужны Fyne, Wayland, X11 и CGO.
+
+Для исходящих подключений к Telegram сервис использует `HTTPS_PROXY` (или `https_proxy`) и учитывает `NO_PROXY`. Поддерживается HTTP-прокси с CONNECT, в том числе URL с Basic-авторизацией. Если в конфиге включён `use_relay`, адрес `relay_addr` имеет приоритет над переменными окружения. `ALL_PROXY` и SOCKS-прокси этим путём не поддерживаются. Входящий локальный порт через прокси окружения не маршрутизируется.
+
+### Фоновый запуск на Linux
+
+Закрой запущенный в терминале экземпляр, затем выполни:
+
+```bash
+make install-user-service
+```
+
+Команда собирает бинарник без CGO, устанавливает его в `~/.local/bin`, включает и запускает пользовательский `systemd` сервис. Если в текущем окружении задан `HTTPS_PROXY`, он вместе с `NO_PROXY` сохраняется в `~/.config/tg-proxy-service/proxy.env` с правами `0600`; существующий файл при повторной установке не перезаписывается. После изменения конфига или proxy.env перезапусти сервис: `systemctl --user restart tg-proxy-service`.
+
+```bash
+make status-user-service # состояние
+make logs-user-service   # логи
+make stop-user-service   # остановка
+```
+
+Сервис запускается при входе пользователя в систему. Для работы после выхода из пользовательской сессии отдельно включи lingering через `loginctl enable-linger "$USER"`.
 
 ## Сборка
 
