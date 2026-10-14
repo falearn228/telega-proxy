@@ -1,0 +1,78 @@
+name: release
+
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Validate Go code
+        run: |
+          files="$(git ls-files '*.go')"
+          unformatted="$(gofmt -l ${files})"
+          if [ -n "${unformatted}" ]; then
+            echo "${unformatted}"
+            exit 1
+          fi
+          go test ./internal/config ./internal/core ./internal/core/proxy ./internal/platform ./mobilebridge ./cmd/tg-proxy-service
+          go vet ./internal/config ./internal/core ./internal/core/proxy ./internal/platform ./mobilebridge ./cmd/tg-proxy-service
+          CGO_ENABLED=0 go build -o bin/tg-proxy-service ./cmd/tg-proxy-service
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Set up C compiler
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: UCRT64
+          install: mingw-w64-ucrt-x86_64-gcc
+      - name: Build Windows desktop app
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+          CGO_ENABLED: "1"
+        run: |
+          $env:PATH = "$env:MSYS2_LOCATION\ucrt64\bin;$env:PATH"
+          $env:CC = "gcc"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          go build -trimpath -ldflags="-H=windowsgui -extldflags=-static" -o dist/tg-fyne-proxy-windows-amd64.exe ./cmd/tg-fyne-proxy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: dist/tg-fyne-proxy-windows-amd64.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [ validate, windows ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-amd64
+          path: dist
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/tg-fyne-proxy-windows-amd64.exe \
+            --verify-tag --title "$RELEASE_TAG" \
+            --notes-file "docs/releases/${RELEASE_TAG#v}.md"
